@@ -1,9 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RefreshCw, Trophy, Zap, Swords, BarChart3, X } from "lucide-react";
 import type { SortImage } from "@/lib/use-image-sort";
 import { getMatchProbability } from "@/lib/use-image-sort";
+
+// Sound manager
+const ResultSoundManager = {
+  isMuted: false,
+  audioInstances: new Map<string, HTMLAudioElement>(),
+
+  init() {
+    const sounds = [
+      { key: "button", path: "/assets/button.wav", volume: 0.2 },
+      { key: "tap", path: "/assets/tap_05.wav", volume: 0.2 },
+      { key: "celebration", path: "/assets/celebration.wav", volume: 0.1 },
+      { key: "toggle_off", path: "/assets/toggle_off.wav", volume: 0.2 },
+      { key: "swipe", path: "/assets/swipe.wav", volume: 0.2 },
+    ];
+
+    sounds.forEach(({ key, path, volume }) => {
+      const audio = new Audio(path);
+      audio.volume = volume;
+      this.audioInstances.set(key, audio);
+    });
+  },
+
+  play(key: string) {
+    if (this.isMuted) return;
+    const audio = this.audioInstances.get(key);
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+  },
+
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+  },
+};
 
 interface ResultScreenProps {
   images: SortImage[];
@@ -127,6 +162,7 @@ function ImageModal({
           className="absolute -top-10 right-0 md:top-0 md:-right-12 z-50 w-8 h-8 rounded-full bg-secondary text-foreground hover:bg-secondary/80 flex items-center justify-center transition-colors shadow-lg border border-border"
           onClick={(e) => {
             e.stopPropagation();
+            ResultSoundManager.play("toggle_off");
             onClose();
           }}
           aria-label="Close modal"
@@ -160,32 +196,32 @@ const TIER_CONFIG: Record<
   { cols: string; h: string; showLabel: boolean; showBar: boolean }
 > = {
   S: {
-    cols: "grid-cols-3 sm:grid-cols-4 md:grid-cols-5",
-    h: "h-28 sm:h-32 md:h-36",
+    cols: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4",
+    h: "w-40 h-40 sm:w-48 sm:h-48 md:w-52 md:h-52",
     showLabel: true,
     showBar: true,
   },
   A: {
-    cols: "grid-cols-4 sm:grid-cols-5 md:grid-cols-7",
-    h: "h-20 sm:h-24 md:h-28",
+    cols: "grid-cols-3 sm:grid-cols-4 md:grid-cols-5",
+    h: "w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40",
     showLabel: true,
     showBar: true,
   },
   B: {
-    cols: "grid-cols-5 sm:grid-cols-7 md:grid-cols-9",
-    h: "h-16 sm:h-18 md:h-20",
+    cols: "grid-cols-4 sm:grid-cols-5 md:grid-cols-7",
+    h: "w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28",
     showLabel: true,
     showBar: false,
   },
   C: {
-    cols: "grid-cols-8 sm:grid-cols-10 md:grid-cols-14",
-    h: "h-10 sm:h-12",
+    cols: "grid-cols-6 sm:grid-cols-8 md:grid-cols-10",
+    h: "w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18",
     showLabel: false,
     showBar: false,
   },
   D: {
-    cols: "grid-cols-10 sm:grid-cols-12 md:grid-cols-16",
-    h: "h-8 sm:h-10",
+    cols: "grid-cols-8 sm:grid-cols-10 md:grid-cols-12",
+    h: "w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14",
     showLabel: false,
     showBar: false,
   },
@@ -198,6 +234,15 @@ export function ResultScreen({
   onReset,
 }: ResultScreenProps) {
   const [modalImage, setModalImage] = useState<ProcessedImage | null>(null);
+  const initedRef = useRef(false);
+
+  // Initialize sound manager on mount
+  useEffect(() => {
+    if (!initedRef.current) {
+      ResultSoundManager.init();
+      initedRef.current = true;
+    }
+  }, []);
 
   const k = 1.0;
   const processedImages: ProcessedImage[] = images
@@ -233,12 +278,12 @@ export function ResultScreen({
         {/* Centered title - compact */}
         <div className="text-center pt-1 mb-2">
           <div className="flex items-center justify-center gap-1.5">
-            <Trophy className="w-5 h-5 text-[hsl(var(--primary))]" />
-            <h2 className="text-xl md:text-2xl font-black text-[hsl(var(--primary))]">
+            <Trophy className="w-6 h-6 text-emerald-500" />
+            <h2 className="text-3xl md:text-4xl font-black text-emerald-500">
               測定完了
             </h2>
           </div>
-          <p className="text-[10px] text-muted-foreground leading-tight">
+          <p className="text-[12px] text-muted-foreground leading-tight">
             {finishReasonText}
           </p>
         </div>
@@ -256,16 +301,16 @@ export function ResultScreen({
                     <div
                       className={`shrink-0 rounded ${tier.badgeClass} border flex items-center justify-center font-black leading-none ${
                         tier.id === "S"
-                          ? "w-6 h-6 text-xs"
+                          ? "w-6 h-6 text-[18px]"
                           : tier.id === "A"
-                            ? "w-5 h-5 text-[10px]"
-                            : "w-4 h-4 text-[9px]"
+                            ? "w-5 h-5 text-[15px]"
+                            : "w-4 h-4 text-[13.5px]"
                       }`}
                     >
                       {tier.name}
                     </div>
                     <span
-                      className={`text-[10px] font-semibold ${tier.color} leading-none`}
+                      className={`text-[14px] font-semibold ${tier.color} leading-none`}
                     >
                       {tier.desc}
                     </span>
@@ -275,8 +320,8 @@ export function ResultScreen({
                     <div className="flex-1 h-px bg-border" />
                   </div>
 
-                  {/* Image grid - tight gap */}
-                  <div className={`grid ${cfg.cols} gap-1`}>
+                  {/* Image grid - reduced gap for C tier */}
+                  <div className={`grid ${cfg.cols} ${tier.id === "C" ? "gap-0.5" : "gap-1"}`}>
                     {items.map((item) => {
                       const globalIndex = processedImages.indexOf(item);
                       const isGod = item.eliteType === "GOD";
@@ -285,16 +330,23 @@ export function ResultScreen({
                         <button
                           type="button"
                           key={item.id}
-                          onClick={() => setModalImage(item)}
-                          className={`group relative rounded-md overflow-hidden border ${tier.bgClass} transition-all hover:scale-[1.04] cursor-pointer text-left`}
+                          onClick={() => {
+                            ResultSoundManager.play("swipe");
+                            setTimeout(() => ResultSoundManager.play("tap"), 100);
+                            setModalImage(item);
+                          }}
+                          onMouseEnter={() => ResultSoundManager.play("tap")}
+                          className={`group relative rounded-md overflow-hidden border ${tier.bgClass} transition-all hover:scale-[1.04] cursor-pointer text-left flex flex-col ${!cfg.showLabel ? cfg.h : ''}`}
                         >
-                          {/* Image */}
-                          <div className={`relative ${cfg.h} w-full`}>
-                            <img
-                              src={item.src || "/placeholder.svg"}
-                              alt={item.name}
-                              className="w-full h-full object-cover"
-                            />
+                          {/* Image container - centered */}
+                          <div className="flex justify-center flex-1">
+                            {/* Image */}
+                            <div className={`relative ${cfg.h} flex items-center justify-center group-hover:scale-105 transition-transform`} onMouseEnter={() => ResultSoundManager.play("tap")}>
+                              <img
+                                src={item.src || "/placeholder.svg"}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                              />
                             {/* Rank number */}
                             <div
                               className={`absolute top-px left-px font-mono font-bold bg-card/70 backdrop-blur-sm rounded-sm text-foreground/70 ${
@@ -305,40 +357,52 @@ export function ResultScreen({
                             >
                               #{globalIndex + 1}
                             </div>
-                            {/* Elite badge */}
-                            {item.eliteType && cfg.showLabel && (
-                              <div className="absolute top-px right-px">
-                                <EliteBadge type={item.eliteType} />
-                              </div>
-                            )}
                             {/* God glow */}
                             {isGod && (
                               <div className="absolute inset-0 ring-1 ring-yellow-400/50 rounded-md pointer-events-none" />
                             )}
+                            </div>
                           </div>
 
                           {/* Info - only S, A, B with label */}
                           {cfg.showLabel && (
-                            <div className="px-1 py-0.5 bg-card/80">
-                              <div className="truncate text-[8px] font-semibold text-foreground leading-tight">
-                                {item.name}
+                            <div className="px-2 py-1 bg-card/80">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <div className="truncate text-sm font-semibold text-foreground leading-tight flex-1">
+                                  {item.name}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-0.5">
+                              <div className="flex items-end justify-end gap-1">
+                                <span className="text-xs font-medium text-foreground/70">適合率</span>
                                 <span
-                                  className={`text-[10px] font-black leading-none ${isGod ? "text-yellow-400" : tier.color}`}
+                                  className={`text-2xl font-black leading-none ${isGod ? "text-yellow-400" : tier.color}`}
                                 >
                                   {item.match_prob}%
                                 </span>
-                                {cfg.showBar && (
-                                  <div className="flex-1 bg-secondary rounded-full h-0.5 overflow-hidden">
-                                    <div
-                                      className={`${isGod ? "bg-yellow-400" : tier.gradientClass} h-full rounded-full`}
-                                      style={{
-                                        width: `${item.match_prob}%`,
-                                      }}
-                                    />
-                                  </div>
-                                )}
+                              </div>
+                              {cfg.showBar && (
+                                <div className="flex-1 bg-secondary rounded-full h-1 overflow-hidden mt-1">
+                                  <div
+                                    className={`${isGod ? "bg-yellow-400" : tier.gradientClass} h-full rounded-full`}
+                                    style={{
+                                      width: `${item.match_prob}%`,
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {/* Elite badges for S, A, B tiers - positioned at bottom left */}
+                          {cfg.showLabel && item.eliteType && (
+                            <div className="absolute bottom-1 left-1">
+                              <EliteBadge type={item.eliteType} />
+                            </div>
+                          )}
+                          {/* File name for C tier (判断保留) */}
+                          {!cfg.showLabel && tier.id === "C" && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-card/80 border-t border-border px-1 py-0.5">
+                              <div className="text-[8px] text-muted-foreground truncate text-center">
+                                {item.name}
                               </div>
                             </div>
                           )}
@@ -356,16 +420,21 @@ export function ResultScreen({
         <div className="flex justify-center mt-4 mb-2">
           <button
             type="button"
-            onClick={onReset}
+            onClick={() => {
+              ResultSoundManager.play("button");
+              setTimeout(() => ResultSoundManager.play("tap"), 80);
+              setTimeout(() => ResultSoundManager.play("tap"), 160);
+              setTimeout(() => ResultSoundManager.play("swipe"), 240);
+              setTimeout(() => onReset(), 350);
+            }}
             className="
               px-7 py-2.5 rounded-full text-sm font-bold
-              bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]
-              hover:opacity-90 hover:-translate-y-0.5
+              bg-emerald-500 text-white
+              hover:bg-emerald-600 hover:-translate-y-0.5
               transition-all shadow-lg flex items-center gap-2
               animate-pulse-glow
             "
           >
-            <RefreshCw className="w-4 h-4" />
             もう一度ソートする
           </button>
         </div>

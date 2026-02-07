@@ -1,6 +1,7 @@
 "use client";
 
 import { Undo2, XCircle, Eye, ArrowLeft } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { SortImage, Phase } from "@/lib/use-image-sort";
 
 interface BattleScreenProps {
@@ -17,6 +18,42 @@ interface BattleScreenProps {
   onQuit: () => void;
 }
 
+// Sound manager
+const SoundManager = {
+  isMuted: false,
+  audioInstances: new Map<string, HTMLAudioElement>(),
+
+  init() {
+    const sounds = [
+      { key: "swipe", path: "/assets/swipe.wav", volume: 0.2 },
+      { key: "button", path: "/assets/button.wav", volume: 0.2 },
+      { key: "celebration", path: "/assets/celebration.wav", volume: 0.1 },
+      { key: "toggle_off", path: "/assets/toggle_off.wav", volume: 0.2 },
+      { key: "tap", path: "/assets/tap_05.wav", volume: 0.2 },
+      { key: "pass", path: "/assets/toggle_off.wav", volume: 0.15 },
+    ];
+
+    sounds.forEach(({ key, path, volume }) => {
+      const audio = new Audio(path);
+      audio.volume = volume;
+      this.audioInstances.set(key, audio);
+    });
+  },
+
+  play(key: string) {
+    if (this.isMuted) return;
+    const audio = this.audioInstances.get(key);
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+  },
+
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+  },
+};
+
 export function BattleScreen({
   currentGroup,
   currentPhase,
@@ -32,6 +69,15 @@ export function BattleScreen({
 }: BattleScreenProps) {
   const { activeCount, frozenCount, progress } = progressInfo;
   const isExploration = currentPhase === "exploration";
+  const initedRef = useRef(false);
+
+  // Initialize sound manager on mount
+  useEffect(() => {
+    if (!initedRef.current) {
+      SoundManager.init();
+      initedRef.current = true;
+    }
+  }, []);
 
   return (
     <div className="w-full max-w-6xl mx-auto text-center py-2 animate-fade-in">
@@ -84,7 +130,7 @@ export function BattleScreen({
       {/* Fighter grid - tight gaps for quick eye scanning */}
       <div
         className={`
-          grid gap-1.5 w-full px-1 md:px-0 transition-all duration-500
+          grid gap-1 w-full px-1 md:px-0 transition-all duration-500
           ${currentGroup.length > 4 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}
           ${shaking ? "animate-shake" : ""}
         `}
@@ -94,7 +140,11 @@ export function BattleScreen({
           <button
             type="button"
             key={img.id}
-            onClick={() => onChoose(img.id)}
+            onClick={() => {
+              SoundManager.play("button");
+              onChoose(img.id);
+            }}
+            onMouseEnter={() => SoundManager.play("tap")}
             className="
               relative group cursor-pointer bg-card rounded-xl border-2 border-transparent
               hover:border-[hsl(var(--primary))] overflow-hidden transition-all duration-200
@@ -109,11 +159,12 @@ export function BattleScreen({
             </div>
 
             {/* Image */}
-            <div className="flex-1 w-full relative overflow-hidden bg-muted/30">
+            <div className="flex-1 w-full relative overflow-hidden bg-muted/30" style={{ minHeight: "320px" }}>
               <img
                 src={img.src || "/placeholder.svg"}
                 alt={img.name}
                 className="absolute inset-0 w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]"
+                onMouseEnter={() => SoundManager.play("tap")}
               />
             </div>
 
@@ -131,24 +182,30 @@ export function BattleScreen({
       <div className="mt-6 flex flex-wrap justify-center items-center gap-3">
         <button
           type="button"
-          onClick={onUndo}
+          onClick={() => {
+            SoundManager.play("toggle_off");
+            onUndo();
+          }}
           disabled={!canUndo}
           className="
-            px-5 py-2 rounded-full text-sm font-medium
+            px-7 py-2.5 rounded-full font-bold
             bg-secondary text-secondary-foreground
             hover:bg-secondary/80 transition-all
             disabled:opacity-40 disabled:cursor-not-allowed
             flex items-center gap-1.5
           "
         >
-          <Undo2 className="w-3.5 h-3.5" />
+          <Undo2 className="w-4 h-4" />
           戻る
           <span className="text-[10px] opacity-60">(BS)</span>
         </button>
 
         <button
           type="button"
-          onClick={onPass}
+          onClick={() => {
+            SoundManager.play("pass");
+            onPass();
+          }}
           className="
             px-7 py-2.5 rounded-full font-bold
             bg-destructive/10 text-destructive border border-destructive/20
@@ -163,15 +220,18 @@ export function BattleScreen({
 
         <button
           type="button"
-          onClick={onFinishEarly}
+          onClick={() => {
+            SoundManager.play("button");
+            onFinishEarly();
+          }}
           className="
-            px-5 py-2 rounded-full text-sm font-medium
+            px-7 py-2.5 rounded-full font-bold
             border border-[hsl(var(--primary))] text-[hsl(var(--primary))]
             hover:bg-accent transition-all
             flex items-center gap-1.5
           "
         >
-          <Eye className="w-3.5 h-3.5" />
+          <Eye className="w-4 h-4" />
           結果を見る
           <span className="text-[10px] opacity-60">(Enter)</span>
         </button>
@@ -180,7 +240,10 @@ export function BattleScreen({
       <div className="mt-3">
         <button
           type="button"
-          onClick={onQuit}
+          onClick={() => {
+            SoundManager.play("toggle_off");
+            onQuit();
+          }}
           className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 mx-auto"
         >
           <ArrowLeft className="w-3 h-3" />

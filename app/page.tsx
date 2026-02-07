@@ -36,6 +36,20 @@ export default function Page() {
     [sort]
   );
 
+  // Hide arrows before sorting starts
+  useEffect(() => {
+    if (sort.screen === "battle" && sort.currentGroup.length > 0) {
+      // Hide all arrow indicators before the first match
+      const hideArrows = () => {
+        const buttons = document.querySelectorAll('button[aria-label*="arrow"]');
+        buttons.forEach((button) => {
+          (button as HTMLElement).style.display = 'none';
+        });
+      };
+      hideArrows();
+    }
+  }, [sort.screen, sort.currentGroup.length]);
+
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -57,24 +71,31 @@ export default function Page() {
         }}
       />
 
+      {/* Gradient overlay for top of screen */}
+      <div className="gradient-overlay" />
+
       {/* Shutter transition */}
       <div
         className={`
-          fixed inset-0 z-[100] bg-[hsl(var(--primary))] shutter-stripes pointer-events-none
+          fixed top-0 left-0 w-full h-full z-[100] bg-teal-700 shutter-stripes
           flex items-center justify-center shadow-2xl
           ${
             sort.shutterState === "hidden"
-              ? "-translate-x-full"
+              ? "opacity-0 pointer-events-none"
               : sort.shutterState === "entering"
-                ? "translate-x-0"
-                : "translate-x-full"
+                ? "opacity-100 pointer-events-auto"
+                : "opacity-0 pointer-events-none"
           }
         `}
         style={{
-          transition:
+          transform:
             sort.shutterState === "hidden"
-              ? "none"
-              : "transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)",
+              ? "translateX(-100%)"
+              : sort.shutterState === "entering"
+                ? "translateX(0)"
+                : "translateX(100%)",
+          transition:
+            "transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.6s cubic-bezier(0.19, 1, 0.22, 1)",
         }}
       />
 

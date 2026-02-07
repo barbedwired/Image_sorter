@@ -167,12 +167,33 @@ export function useImageSort() {
   }, [images]);
 
   const finishSort = useCallback(async () => {
+    // Play celebration sound
+    const celebrationAudio = new Audio("/assets/celebration.wav");
+    celebrationAudio.volume = 0.1;
+    celebrationAudio.play().catch(() => {});
+
+    // 膜を降ろす（hidden → entering）
     setShutterState("entering");
+    // Reactのrendering完了を待つ（次のティックまで）
+    await new Promise((r) => setTimeout(r, 50));
+    // 膜が降りるのを待つ（アニメーション0.6s）
     await new Promise((r) => setTimeout(r, 600));
+    
+    // 画面を切り替える
     setScreen("result");
     syncState();
+    // Reactのrendering完了を待つ
+    await new Promise((r) => setTimeout(r, 50));
+    
+    // すぐに膜を上げる（entering → leaving）
     setShutterState("leaving");
-    setTimeout(() => setShutterState("hidden"), 600);
+    // Reactのrendering完了を待つ
+    await new Promise((r) => setTimeout(r, 50));
+    // 膜が上がるのを待つ（アニメーション0.6s）
+    await new Promise((r) => setTimeout(r, 600));
+    
+    // 膜をリセット（leaving → hidden）
+    setShutterState("hidden");
   }, [syncState]);
 
   const nextMatch = useCallback(() => {
@@ -281,6 +302,12 @@ export function useImageSort() {
       if (eType) {
         top.status = "frozen";
         top.eliteType = eType;
+        
+        // Play elite freeze sound
+        const eliteAudio = new Audio("/assets/celebration.wav");
+        eliteAudio.volume = 0.3;
+        eliteAudio.play().catch(() => {});
+        
         stalemateCounterRef.current = 0;
         updateSystemState();
         return;
