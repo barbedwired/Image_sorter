@@ -77,7 +77,7 @@ export default function Page() {
       {/* Shutter transition */}
       <div
         className={`
-          fixed top-0 left-0 w-full h-full z-[100] bg-teal-700 shutter-stripes
+          fixed top-0 left-0 w-full h-full z-[100] bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-500 shutter-stripes
           flex items-center justify-center shadow-2xl
           ${
             sort.shutterState === "hidden"
@@ -104,6 +104,8 @@ export default function Page() {
         {sort.screen === "upload" && (
           <UploadScreen
             images={sort.images}
+            isProcessing={sort.isProcessing}
+            processingCount={sort.processingCount}
             onAddImages={sort.addImages}
             onDeleteImage={sort.deleteImage}
             onClearAll={sort.clearAllImages}

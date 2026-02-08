@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Image_sorter
 
-## Getting Started
 
-First, run the development server:
+[![Live Demo](https://img.shields.io/badge/demo-online-emerald.svg)](https://barbedwired.github.io/Image_sorter/)
+アイコンクリックででもページに飛びます。
+ユーザーの主観的な好みを統計的に処理し、最適なランキングを導き出します。ブラッドリー・テリーモデルとベイズ的推論を基盤とした、高精度な多択式画像ソートエンジンです。
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Learn More
+## 主な機能
 
-To learn more about Next.js, take a look at the following resources:
+* **多択選択式アルゴリズム**: 1対1ではなく、4枚から6枚の画像の中から直感的に「一番」を選ぶ形式。脳の疲労を抑えつつ、効率的なデータ収集が可能です。
+* **エリート選抜（Freeze）機能**: 分析の過程で圧倒的な有意差が認められた個体を自動検知し、上位枠へ固定します。
+* **不確実性（$\sigma$）の推定**: 各画像の評価の「ブレ」を数値化。評価が未確定なものを優先的に提示することで、最短手数での収束を実現します。
+* **統計リザルト**: 測定完了後、適合率や不確実性の推移などの統計データと共に、Tier表形式で結果を表示します。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 技術仕様
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 数理モデル
+本ツールは、ペア比較データから項目の強さを推定する **ブラッドリー・テリーモデル (Bradley-Terry model)** をオンライン学習向けに拡張して採用しています。
 
-## Deploy on Vercel
+$$P(i > j) = \frac{\alpha_i}{\alpha_i + \alpha_j}$$
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+このモデルに評価の不確実性を表す **$\sigma$ (Sigma)** パラメータを組み合わせることで、Glickoレーティングのような動的な学習率制御を行っています。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+## 使い方
+
+1. `index.html` をブラウザで開きます。
+2. ソートしたい画像をドラッグ＆ドロップで追加します。
+3. 表示される画像の中から、最も好ましいものをクリックして選択します。
+4. 結果画面で、適合率に基づいた最終ランキングを確認できます。
+
+### キーボードショートカット
+* `1` 〜 `6`: 画像の選択
+* `Backspace`: 1手戻る
+* `Space`: 判断保留（パス）
+* `Enter`: 終了して結果を表示
+
+## ライセンス
+ Sound Effects: Dentsu Free Sound Assets
+ The source code of this project is licensed under the MIT License. However, the sound files located in the assets/ directory are not covered by this license. Redistribution or commercial use of these specific assets is prohibited.

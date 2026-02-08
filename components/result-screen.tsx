@@ -11,12 +11,13 @@ const ResultSoundManager = {
   audioInstances: new Map<string, HTMLAudioElement>(),
 
   init() {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
     const sounds = [
-      { key: "button", path: "/assets/button.wav", volume: 0.2 },
-      { key: "tap", path: "/assets/tap_05.wav", volume: 0.2 },
-      { key: "celebration", path: "/assets/celebration.wav", volume: 0.1 },
-      { key: "toggle_off", path: "/assets/toggle_off.wav", volume: 0.2 },
-      { key: "swipe", path: "/assets/swipe.wav", volume: 0.2 },
+      { key: "button", path: "/Image_sorter/assets/button.wav", volume: 0.5 },
+      { key: "tap", path: "/Image_sorter/assets/tap_05.wav", volume: 0.5 },
+      { key: "celebration", path: "/Image_sorter/assets/celebration.wav", volume: 0.1 },
+      { key: "toggle_off", path: "/Image_sorter/assets/toggle_off.wav", volume: 0.2 },
+      { key: "swipe", path: "/Image_sorter/assets/swipe.wav", volume: 0.2 },
     ];
 
     sounds.forEach(({ key, path, volume }) => {
@@ -178,10 +179,10 @@ function ImageModal({
           role="presentation"
         />
         <div className="mt-2 text-center pointer-events-none">
-          <div className="text-2xl font-bold text-[hsl(var(--primary))] drop-shadow-md">
+          <div className="text-2xl font-bold text-[hsl(var(--primary))]">
             {image.match_prob}% Match
           </div>
-          <div className="text-foreground text-sm font-medium drop-shadow-md">
+          <div className="text-foreground text-sm font-medium">
             {image.name}
           </div>
         </div>
@@ -320,8 +321,8 @@ export function ResultScreen({
                     <div className="flex-1 h-px bg-border" />
                   </div>
 
-                  {/* Image grid - reduced gap for C tier */}
-                  <div className={`grid ${cfg.cols} ${tier.id === "C" ? "gap-0.5" : "gap-1"}`}>
+                  {/* Image grid - minimal gap for C tier */}
+                  <div className={`grid ${cfg.cols} ${tier.id === "C" ? "gap-0" : "gap-1"}`}>
                     {items.map((item) => {
                       const globalIndex = processedImages.indexOf(item);
                       const isGod = item.eliteType === "GOD";
@@ -336,15 +337,16 @@ export function ResultScreen({
                             setModalImage(item);
                           }}
                           onMouseEnter={() => ResultSoundManager.play("tap")}
-                          className={`group relative rounded-md overflow-hidden border ${tier.bgClass} transition-all hover:scale-[1.04] cursor-pointer text-left flex flex-col ${!cfg.showLabel ? cfg.h : ''}`}
+                          className={`group relative rounded-md overflow-hidden border ${tier.bgClass} transition-all hover:scale-[1.04] cursor-pointer text-left flex flex-col ${!cfg.showLabel ? cfg.h : ''} ${tier.id === "C" ? "p-0" : ""}`}
                         >
                           {/* Image container - centered */}
                           <div className="flex justify-center flex-1">
                             {/* Image */}
-                            <div className={`relative ${cfg.h} flex items-center justify-center group-hover:scale-105 transition-transform`} onMouseEnter={() => ResultSoundManager.play("tap")}>
+                          <div className={`relative ${cfg.h} flex items-center justify-center group-hover:scale-105 transition-transform`}>
                               <img
                                 src={item.src || "/placeholder.svg"}
                                 alt={item.name}
+                                decoding="async"
                                 className="w-full h-full object-cover"
                               />
                             {/* Rank number */}
@@ -372,30 +374,28 @@ export function ResultScreen({
                                   {item.name}
                                 </div>
                               </div>
-                              <div className="flex items-end justify-end gap-1">
-                                <span className="text-xs font-medium text-foreground/70">適合率</span>
-                                <span
-                                  className={`text-2xl font-black leading-none ${isGod ? "text-yellow-400" : tier.color}`}
-                                >
-                                  {item.match_prob}%
-                                </span>
-                              </div>
-                              {cfg.showBar && (
-                                <div className="flex-1 bg-secondary rounded-full h-1 overflow-hidden mt-1">
+                              <div className="card-footer flex justify-between items-end">
+                                <div className="flex items-center">
+                                  {cfg.showLabel && item.eliteType && (
+                                    <EliteBadge type={item.eliteType} />
+                                  )}
+                                </div>
+                                <div className="score-container relative flex items-end">
+                                  <span className="text-xs font-medium text-foreground/70">適合率</span>
+                                  <span
+                                    className={`text-2xl font-black leading-none ${isGod ? "text-yellow-400" : tier.color}`}
+                                  >
+                                    {item.match_prob}%
+                                  </span>
                                   <div
-                                    className={`${isGod ? "bg-yellow-400" : tier.gradientClass} h-full rounded-full`}
+                                    className={`progress-bar ${isGod ? "bg-yellow-400" : tier.gradientClass} absolute left-0 top-0 h-full rounded-full`}
                                     style={{
                                       width: `${item.match_prob}%`,
+                                      zIndex: -1,
                                     }}
                                   />
                                 </div>
-                              )}
-                            </div>
-                          )}
-                          {/* Elite badges for S, A, B tiers - positioned at bottom left */}
-                          {cfg.showLabel && item.eliteType && (
-                            <div className="absolute bottom-1 left-1">
-                              <EliteBadge type={item.eliteType} />
+                              </div>
                             </div>
                           )}
                           {/* File name for C tier (判断保留) */}

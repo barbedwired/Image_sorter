@@ -12,6 +12,7 @@ export interface SortImage {
   id: number;
   name: string;
   src: string;
+  thumbnailUrl?: string;
   rating: number;
   sigma: number;
   viewCount: number;
@@ -19,10 +20,17 @@ export interface SortImage {
   wins: number;
   status: ImageStatus;
   eliteType: EliteType;
+  isProcessing?: boolean;
 }
 
 interface HistoryEntry {
-  imagesCopy: SortImage[];
+  imagesSnapshot: Array<{
+    id: number;
+    rating: number;
+    sigma: number;
+    viewCount: number;
+    wins: number;
+  }>;
   actionLogCopy: ActionEntry[];
   phase: Phase;
   locked: boolean;
@@ -60,10 +68,129 @@ function shuffleArray<T>(array: T[]): T[] {
   return arr;
 }
 
+// 軽量化処理関数
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error('Canvas context not available'));
+        return;
+      }
+      
+      // 長辺を800pxにリサイズ（プレビュー用）
+      const maxSize = 800;
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > height) {
+        if (width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // 高品質で圧縮
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          reject(new Error('Failed to create blob'));
+          return;
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        resolve(blobUrl);
+      }, 'image/jpeg', 0.8);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    
+    img.src = url;
+  });
+}
+
+// サムネイル生成関数（即時プレビュー用）
+async function generateThumbnail(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error('Canvas context not available'));
+        return;
+      }
+      
+      // 長辺を400pxにリサイズ
+      const maxSize = 400;
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > height) {
+        if (width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Blob URL方式に変更
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          reject(new Error('Failed to create blob'));
+          return;
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        resolve(blobUrl);
+      }, 'image/jpeg', 0.8);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    
+    img.src = url;
+  });
+}
+
 export function useImageSort() {
   const [screen, setScreen] = useState<Screen>("upload");
   const [images, setImages] = useState<SortImage[]>([]);
   const [currentGroup, setCurrentGroup] = useState<SortImage[]>([]);
+  const [nextGroup, setNextGroup] = useState<SortImage[]>([]);
   const [currentPhase, setCurrentPhase] = useState<Phase>("exploration");
   const [globalPassStreak, setGlobalPassStreak] = useState(0);
   const [totalClicks, setTotalClicks] = useState(0);
@@ -72,6 +199,9 @@ export function useImageSort() {
   const [shutterState, setShutterState] = useState<
     "hidden" | "entering" | "leaving"
   >("hidden");
+  const [nextRoundImages, setNextRoundImages] = useState<SortImage[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingCount, setProcessingCount] = useState(0);
 
   // Mutable refs for imperative logic that doesn't need re-render
   const imagesRef = useRef<SortImage[]>([]);
@@ -86,6 +216,7 @@ export function useImageSort() {
   const currentPhaseRef = useRef<Phase>("exploration");
   const finishReasonRef = useRef("完走");
   const currentGroupRef = useRef<SortImage[]>([]);
+  const processingQueueRef = useRef<Set<number>>(new Set());
 
   const syncState = useCallback(() => {
     setImages([...imagesRef.current]);
@@ -98,34 +229,106 @@ export function useImageSort() {
 
   // === File handling ===
   const addImages = useCallback(
-    (files: FileList) => {
+    async (files: FileList) => {
       let added = 0;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (!file.type.startsWith("image/")) continue;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const newImg: SortImage = {
-            id: Math.random(),
-            name: file.name,
-            src: e.target?.result as string,
-            rating: RATING_BASE,
-            sigma: SIGMA_INIT,
-            viewCount: 0,
-            passCount: 0,
-            wins: 0,
-            status: "active",
-            eliteType: null,
+        
+        try {
+          // Blob URL方式でサムネイルを生成（即時プレビュー）
+          const thumbnailUrl = await generateThumbnail(file);
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const newImg: SortImage = {
+              id: Math.random(),
+              name: file.name,
+              src: e.target?.result as string,
+              thumbnailUrl,
+              rating: RATING_BASE,
+              sigma: SIGMA_INIT,
+              viewCount: 0,
+              passCount: 0,
+              wins: 0,
+              status: "active",
+              eliteType: null,
+              isProcessing: true,
+            };
+            imagesRef.current = [...imagesRef.current, newImg];
+            added++;
+            syncState();
+            
+            // 背景で軽量化処理を開始
+            processImageInBackground(newImg.id, file);
           };
-          imagesRef.current = [...imagesRef.current, newImg];
-          added++;
-          syncState();
-        };
-        reader.readAsDataURL(file);
+          reader.readAsDataURL(file);
+        } catch (error) {
+          console.error('Failed to generate thumbnail:', error);
+          // サムネイル生成失敗時は通常の画像だけ追加
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const newImg: SortImage = {
+              id: Math.random(),
+              name: file.name,
+              src: e.target?.result as string,
+              rating: RATING_BASE,
+              sigma: SIGMA_INIT,
+              viewCount: 0,
+              passCount: 0,
+              wins: 0,
+              status: "active",
+              eliteType: null,
+            };
+            imagesRef.current = [...imagesRef.current, newImg];
+            added++;
+            syncState();
+          };
+          reader.readAsDataURL(file);
+        }
       }
     },
     [syncState]
   );
+
+  // 背景で画像を軽量化処理
+  const processImageInBackground = useCallback(async (id: number, file: File) => {
+    try {
+      processingQueueRef.current.add(id);
+      setProcessingCount(prev => prev + 1);
+      setIsProcessing(true);
+
+      const compressedUrl = await compressImage(file);
+      
+      // 処理が完了したらBlob URLを差し替え
+      const imgIndex = imagesRef.current.findIndex(img => img.id === id);
+      if (imgIndex !== -1) {
+        const img = imagesRef.current[imgIndex];
+        // 古いBlob URLを解放
+        if (img.thumbnailUrl) {
+          try {
+            URL.revokeObjectURL(img.thumbnailUrl);
+          } catch (e) {
+            // URLが既に解放されている可能性がある
+          }
+        }
+        
+        // 新しい軽量化されたURLに差し替え
+        img.thumbnailUrl = compressedUrl;
+        img.isProcessing = false;
+        imagesRef.current[imgIndex] = img;
+        syncState();
+      }
+    } catch (error) {
+      console.error('Failed to compress image:', error);
+    } finally {
+      processingQueueRef.current.delete(id);
+      setProcessingCount(prev => Math.max(0, prev - 1));
+      if (processingQueueRef.current.size === 0) {
+        setIsProcessing(false);
+      }
+    }
+  }, [syncState]);
 
   const deleteImage = useCallback(
     (id: number) => {
@@ -136,6 +339,22 @@ export function useImageSort() {
   );
 
   const clearAllImages = useCallback(() => {
+    // Blob URLのメモリ解放
+    imagesRef.current.forEach((img) => {
+      if (img.thumbnailUrl) {
+        try {
+          URL.revokeObjectURL(img.thumbnailUrl);
+        } catch (e) {
+          // URLが既に解放されている可能性がある
+        }
+      }
+    });
+    
+    // 処理中のキューをクリア
+    processingQueueRef.current.clear();
+    setProcessingCount(0);
+    setIsProcessing(false);
+    
     imagesRef.current = [];
     syncState();
   }, [syncState]);
@@ -168,7 +387,7 @@ export function useImageSort() {
 
   const finishSort = useCallback(async () => {
     // Play celebration sound
-    const celebrationAudio = new Audio("/assets/celebration.wav");
+    const celebrationAudio = new Audio("/Image_sorter/assets/celebration.wav");
     celebrationAudio.volume = 0.1;
     celebrationAudio.play().catch(() => {});
 
@@ -185,16 +404,45 @@ export function useImageSort() {
     // Reactのrendering完了を待つ
     await new Promise((r) => setTimeout(r, 50));
     
-    // すぐに膜を上げる（entering → leaving）
-    setShutterState("leaving");
-    // Reactのrendering完了を待つ
-    await new Promise((r) => setTimeout(r, 50));
-    // 膜が上がるのを待つ（アニメーション0.6s）
-    await new Promise((r) => setTimeout(r, 600));
-    
-    // 膜をリセット（leaving → hidden）
-    setShutterState("hidden");
-  }, [syncState]);
+    // 処理が完了している場合はすぐに膜を上げる
+    if (!isProcessing) {
+      // すぐに膜を上げる（entering → leaving）
+      setShutterState("leaving");
+      // Reactのrendering完了を待つ
+      await new Promise((r) => setTimeout(r, 50));
+      // 膜が上がるのを待つ（アニメーション0.6s）
+      await new Promise((r) => setTimeout(r, 600));
+      
+      // 膜をリセット（leaving → hidden）
+      setShutterState("hidden");
+    } else {
+      // 処理が完了するまで待機
+      while (processingQueueRef.current.size > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // 処理が完了したら膜を上げる
+      setShutterState("leaving");
+      // Reactのrendering完了を待つ
+      await new Promise((r) => setTimeout(r, 50));
+      // 膜が上がるのを待つ（アニメーション0.6s）
+      await new Promise((r) => setTimeout(r, 600));
+      
+      // 膜をリセット（leaving → hidden）
+      setShutterState("hidden");
+    }
+  }, [syncState, isProcessing]);
+
+  const preloadImages = useCallback((imagesToPreload: SortImage[]) => {
+    imagesToPreload.forEach((img) => {
+      const imgObj = new Image();
+      imgObj.src = img.src;
+      imgObj.decoding = "async";
+      // Force loading by setting a small width/height
+      imgObj.width = 1;
+      imgObj.height = 1;
+    });
+  }, []);
 
   const nextMatch = useCallback(() => {
     const imgs = imagesRef.current;
@@ -253,9 +501,39 @@ export function useImageSort() {
       selection.push(othersPool[i]);
     }
 
-    currentGroupRef.current = shuffleArray(selection);
+    // 安全装置: undefined を除外
+    selection = selection.filter((img) => img !== undefined);
+
+    // 無限ループ防止: 4択モードでも安全に処理
+    if (selection.length < size && candidatePool.length > 0) {
+      // 不足分をランダムに補充
+      const remaining = candidatePool.filter(img => !selection.includes(img));
+      const needed = size - selection.length;
+      const supplement = shuffleArray(remaining).slice(0, needed);
+      selection = [...selection, ...supplement];
+    }
+
+    // 4択モードの安全装置: 選出数が足りない場合は強制的に補充
+    if (selection.length < size) {
+      const allActive = imgs.filter(i => i.status === "active");
+      const missing = size - selection.length;
+      const supplement = shuffleArray(allActive.filter(img => !selection.includes(img))).slice(0, missing);
+      selection = [...selection, ...supplement];
+    }
+
+    // Preload next round images
+    const nextRoundCandidates = candidatePool.slice(0, Math.min(6, candidatePool.length));
+    setNextRoundImages(nextRoundCandidates);
+    preloadImages(nextRoundCandidates);
+
+    // Double buffering: swap current and next groups
+    const newCurrentGroup = shuffleArray(selection);
+    const newNextGroup = shuffleArray(nextRoundCandidates);
+    
+    currentGroupRef.current = newCurrentGroup;
+    setNextGroup(newNextGroup);
     syncState();
-  }, [finishSort, syncState]);
+  }, [finishSort, syncState, preloadImages]);
 
   const updateSystemState = useCallback(() => {
     const imgs = imagesRef.current;
@@ -304,7 +582,7 @@ export function useImageSort() {
         top.eliteType = eType;
         
         // Play elite freeze sound
-        const eliteAudio = new Audio("/assets/celebration.wav");
+        const eliteAudio = new Audio("/Image_sorter/assets/celebration.wav");
         eliteAudio.volume = 0.3;
         eliteAudio.play().catch(() => {});
         
@@ -367,8 +645,19 @@ export function useImageSort() {
   }, [finishSort, syncState]);
 
   // === Public actions ===
-  const startBattle = useCallback(() => {
+  const startBattle = useCallback(async () => {
     if (imagesRef.current.length < 2) return;
+    
+    // バックグラウンド処理が終わっていない場合は待機
+    if (isProcessing) {
+      // ローディング画面を表示
+      setScreen("upload"); // 一時的にアップロード画面に戻す
+      // 処理が完了するまで待機
+      while (processingQueueRef.current.size > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
     imagesRef.current.forEach((i) => {
       i.rating = RATING_BASE;
       i.sigma = SIGMA_INIT;
@@ -391,11 +680,17 @@ export function useImageSort() {
     setScreen("battle");
     updateSystemState();
     nextMatch();
-  }, [updateSystemState, nextMatch]);
+  }, [updateSystemState, nextMatch, isProcessing]);
 
   const pushHistory = () => {
     historyStackRef.current.push({
-      imagesCopy: JSON.parse(JSON.stringify(imagesRef.current)),
+      imagesSnapshot: imagesRef.current.map(img => ({
+        id: img.id,
+        rating: img.rating,
+        sigma: img.sigma,
+        viewCount: img.viewCount,
+        wins: img.wins
+      })),
       actionLogCopy: [...actionLogRef.current],
       phase: currentPhaseRef.current,
       locked: precisionModeLockedRef.current,
@@ -534,7 +829,18 @@ export function useImageSort() {
   const undo = useCallback(() => {
     if (historyStackRef.current.length === 0) return;
     const state = historyStackRef.current.pop()!;
-    imagesRef.current = state.imagesCopy;
+    
+    // Restore lightweight snapshot data to current images
+    state.imagesSnapshot.forEach(snapshot => {
+      const img = imagesRef.current.find(i => i.id === snapshot.id);
+      if (img) {
+        img.rating = snapshot.rating;
+        img.sigma = snapshot.sigma;
+        img.viewCount = snapshot.viewCount;
+        img.wins = snapshot.wins;
+      }
+    });
+    
     actionLogRef.current = state.actionLogCopy;
     currentPhaseRef.current = state.phase;
     precisionModeLockedRef.current = state.locked;
@@ -597,6 +903,9 @@ export function useImageSort() {
     shaking,
     shutterState,
     canUndo,
+
+    isProcessing,    // ← これがないとエラーになる
+    processingCount, // ← これもないとエラーになる
 
     addImages,
     deleteImage,

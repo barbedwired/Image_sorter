@@ -13,11 +13,12 @@ const UploadSoundManager = {
   audioInstances: new Map<string, HTMLAudioElement>(),
 
   init() {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
     const sounds = [
-      { key: "swipe", path: "/assets/swipe.wav", volume: 0.2 },
-      { key: "button", path: "/assets/button.wav", volume: 0.2 },
-      { key: "toggle_off", path: "/assets/toggle_off.wav", volume: 0.2 },
-      { key: "tap", path: "/assets/tap_05.wav", volume: 0.2 },
+      { key: "swipe", path: "/Image_sorter/assets/swipe.wav", volume: 0.2 },
+      { key: "button", path: "/Image_sorter/assets/button.wav", volume: 0.2 },
+      { key: "toggle_off", path: "/Image_sorter/assets/toggle_off.wav", volume: 0.2 },
+      { key: "tap", path: "/Image_sorter/assets/tap_05.wav", volume: 0.2 },
     ];
 
     sounds.forEach(({ key, path, volume }) => {
@@ -43,6 +44,8 @@ const UploadSoundManager = {
 
 interface UploadScreenProps {
   images: SortImage[];
+  isProcessing?: boolean;
+  processingCount?: number;
   onAddImages: (files: FileList) => void;
   onDeleteImage: (id: number) => void;
   onClearAll: () => void;
@@ -51,6 +54,8 @@ interface UploadScreenProps {
 
 export function UploadScreen({
   images,
+  isProcessing = false,
+  processingCount = 0,
   onAddImages,
   onDeleteImage,
   onClearAll,
@@ -117,13 +122,15 @@ export function UploadScreen({
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
+            onMouseEnter={() => setIsDragging(true)}
+            onMouseLeave={() => setIsDragging(false)}
             className={`
               relative border-2 border-dashed rounded-xl p-10 md:p-12 text-center cursor-pointer
               transition-all duration-200 group mb-6
               ${
                 isDragging
-                  ? "border-[hsl(var(--primary))] bg-accent scale-[1.01]"
-                  : "border-border hover:border-[hsl(var(--primary))] hover:bg-accent/50"
+                  ? "border-[hsl(var(--primary))] bg-accent/50 scale-[1.01]"
+                  : "border-border hover:border-[hsl(var(--primary))] hover:bg-emerald-500/10"
               }
             `}
           >
@@ -146,10 +153,10 @@ export function UploadScreen({
               <div
                 className={`
                 w-14 h-14 rounded-full flex items-center justify-center transition-colors
-                ${isDragging ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]" : "bg-muted text-muted-foreground group-hover:bg-[hsl(var(--primary))] group-hover:text-[hsl(var(--primary-foreground))]"}
+                ${isDragging ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]" : "bg-muted text-muted-foreground group-hover:bg-emerald-500 group-hover:text-emerald-50"}
               `}
               >
-                <Upload className="w-6 h-6" />
+                <Upload className={`w-6 h-6 ${isDragging ? "text-[hsl(var(--primary-foreground))]" : "text-muted-foreground"} group-hover:text-emerald-50`} />
               </div>
               <div>
                 <p className="text-foreground font-medium">
@@ -159,7 +166,7 @@ export function UploadScreen({
                   枚数が多いほど選別効果が高まります
                 </p>
               </div>
-              <div className="text-xs font-mono text-muted-foreground bg-muted px-3 py-1 rounded-full">
+              <div className={`text-xs font-mono px-3 py-1 rounded-full ${images.length > 0 ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30" : "text-muted-foreground bg-muted"}`}>
                 {images.length > 0
                   ? `読み込み済み: ${images.length}枚`
                   : "画像数: 0"}
@@ -168,12 +175,26 @@ export function UploadScreen({
           </div>
 
           {/* Thumbnail area */}
-          <div className="bg-muted/50 rounded-xl p-4 border border-border min-h-[100px]">
-            {images.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-6">
-                画像がありません
-              </p>
-            ) : (
+          {images.length > 0 && (
+            <div className="bg-muted/50 rounded-xl p-4 border border-border min-h-[100px] relative">
+              {/* Clear all button - bottom right of thumbnail area */}
+              {images.length >= 2 && (
+                <div className="absolute bottom-2 right-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("全削除しますか？")) {
+                        UploadSoundManager.play("toggle_off");
+                        onClearAll();
+                      }
+                    }}
+                    className="w-6 h-6 bg-muted text-muted-foreground rounded-full flex items-center justify-center hover:bg-muted/80 hover:text-muted-foreground/80 transition-colors shadow-md"
+                    aria-label="全削除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 justify-center">
                 {images.map((item) => (
                   <div
@@ -186,24 +207,27 @@ export function UploadScreen({
                         alt={item.name}
                         className="w-full h-full object-cover"
                       />
+                      {/* Overlay with delete button */}
+                      <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            UploadSoundManager.play("toggle_off");
+                            onDeleteImage(item.id);
+                          }}
+                          className="w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90 transition-colors shadow-md"
+                          aria-label={`Delete ${item.name}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        UploadSoundManager.play("toggle_off");
-                        onDeleteImage(item.id);
-                      }}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-md z-10"
-                      aria-label={`Delete ${item.name}`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="mt-8 flex flex-col items-center gap-3">
@@ -212,15 +236,15 @@ export function UploadScreen({
                 UploadSoundManager.play("button");
                 onStart();
               }}
-              disabled={images.length < 2}
+              disabled={images.length < 2 || isProcessing}
               variant={images.length >= 2 ? "default" : "secondary"}
               className={`
                 px-10 py-3.5 rounded-full text-base font-bold
                 transition-all duration-500 ease-in-out
                 shadow-lg
                 ${
-                  images.length >= 2
-                    ? "bg-green-600 text-white hover:bg-green-700 hover:opacity-90 hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 active:shadow-md animate-pulse-glow"
+                  images.length >= 2 && !isProcessing
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600 hover:-translate-y-0.5 transition-all shadow-lg animate-pulse-glow"
                     : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-muted-foreground/80"
                 }
               `}
@@ -232,22 +256,15 @@ export function UploadScreen({
               </span>
             </Button>
 
-            {images.length >= 2 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm("全削除しますか？")) {
-                    UploadSoundManager.play("toggle_off");
-                    onClearAll();
-                  }
-                }}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
-              >
-                <Trash2 className="w-3 h-3" />
-                全削除
-              </button>
+            {/* Processing indicator */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="w-4 h-4 border-2 border-muted-foreground border-t-primary rounded-full animate-spin" />
+                <span>画像を最適化中... ({processingCount}枚処理中)</span>
+              </div>
             )}
           </div>
+
         </div>
       </div>
     </div>

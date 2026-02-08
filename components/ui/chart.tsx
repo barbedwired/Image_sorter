@@ -116,12 +116,10 @@ const ChartTooltipContent = React.forwardRef<
   (
     {
       active,
-      payload,
       className,
       indicator = 'dot',
       hideLabel = false,
       hideIndicator = false,
-      label,
       labelFormatter,
       labelClassName,
       formatter,
@@ -134,22 +132,22 @@ const ChartTooltipContent = React.forwardRef<
     const { config } = useChart()
 
     const tooltipLabel = React.useMemo(() => {
-      if (hideLabel || !payload?.length) {
+      if (hideLabel || !active) {
         return null
       }
 
-      const [item] = payload
-      const key = `${labelKey || item.dataKey || item.name || 'value'}`
+      const [item] = Array.isArray(active) ? active : []
+      const key = `${labelKey || item?.dataKey || item?.name || 'value'}`
       const itemConfig = getPayloadConfigFromPayload(config, item, key)
       const value =
-        !labelKey && typeof label === 'string'
-          ? config[label as keyof typeof config]?.label || label
+        !labelKey && typeof item?.label === 'string'
+          ? config[item.label as keyof typeof config]?.label || item.label
           : itemConfig?.label
 
       if (labelFormatter) {
         return (
           <div className={cn('font-medium', labelClassName)}>
-            {labelFormatter(value, payload)}
+            {labelFormatter(value, Array.isArray(active) ? active : [])}
           </div>
         )
       }
@@ -160,20 +158,19 @@ const ChartTooltipContent = React.forwardRef<
 
       return <div className={cn('font-medium', labelClassName)}>{value}</div>
     }, [
-      label,
       labelFormatter,
-      payload,
+      active,
       hideLabel,
       labelClassName,
       config,
       labelKey,
     ])
 
-    if (!active || !payload?.length) {
+    if (!active || !Array.isArray(active) || !active.length) {
       return null
     }
 
-    const nestLabel = payload.length === 1 && indicator !== 'dot'
+    const nestLabel = active.length === 1 && indicator !== 'dot'
 
     return (
       <div
@@ -185,7 +182,7 @@ const ChartTooltipContent = React.forwardRef<
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {active.map((item: any, index: number) => {
             const key = `${nameKey || item.name || item.dataKey || 'value'}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
             const indicatorColor = color || item.payload.fill || item.color
@@ -261,9 +258,10 @@ const ChartLegend = RechartsPrimitive.Legend
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<'div'> &
-    Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
+    Pick<RechartsPrimitive.LegendProps, 'verticalAlign'> & {
       hideIcon?: boolean
       nameKey?: string
+      payload?: any[]
     }
 >(
   (

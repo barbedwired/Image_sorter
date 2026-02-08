@@ -24,13 +24,14 @@ const SoundManager = {
   audioInstances: new Map<string, HTMLAudioElement>(),
 
   init() {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
     const sounds = [
-      { key: "swipe", path: "/assets/swipe.wav", volume: 0.2 },
-      { key: "button", path: "/assets/button.wav", volume: 0.2 },
-      { key: "celebration", path: "/assets/celebration.wav", volume: 0.1 },
-      { key: "toggle_off", path: "/assets/toggle_off.wav", volume: 0.2 },
-      { key: "tap", path: "/assets/tap_05.wav", volume: 0.2 },
-      { key: "pass", path: "/assets/toggle_off.wav", volume: 0.15 },
+      { key: "swipe", path: "/Image_sorter/assets/swipe.wav", volume: 0.2 },
+      { key: "button", path: "/Image_sorter/assets/button.wav", volume: 0.5 },
+      { key: "celebration", path: "/Image_sorter/assets/celebration.wav", volume: 0.1 },
+      { key: "toggle_off", path: "/Image_sorter/assets/toggle_off.wav", volume: 0.2 },
+      { key: "tap", path: "/Image_sorter/assets/tap_05.wav", volume: 0.5 },
+      { key: "pass", path: "/Image_sorter/assets/toggle_off.wav", volume: 0.15 },
     ];
 
     sounds.forEach(({ key, path, volume }) => {
@@ -127,55 +128,116 @@ export function BattleScreen({
         </div>
       </div>
 
-      {/* Fighter grid - tight gaps for quick eye scanning */}
-      <div
-        className={`
-          grid gap-1 w-full px-1 md:px-0 transition-all duration-500
-          ${currentGroup.length > 4 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}
-          ${shaking ? "animate-shake" : ""}
-        `}
-        style={{ minHeight: "50vh" }}
-      >
-        {currentGroup.map((img, index) => (
-          <button
-            type="button"
-            key={img.id}
-            onClick={() => {
-              SoundManager.play("button");
-              onChoose(img.id);
-            }}
-            onMouseEnter={() => SoundManager.play("tap")}
-            className="
-              relative group cursor-pointer bg-card rounded-xl border-2 border-transparent
-              hover:border-[hsl(var(--primary))] overflow-hidden transition-all duration-200
-              hover:-translate-y-1 hover:shadow-xl animate-pop flex flex-col
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-            "
-            style={{ animationDelay: `${index * 0.05}s` }}
-          >
-            {/* Number badge */}
-            <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-md bg-foreground/70 backdrop-blur-sm text-background text-xs font-bold flex items-center justify-center shadow-sm">
-              {index + 1}
-            </div>
-
-            {/* Image */}
-            <div className="flex-1 w-full relative overflow-hidden bg-muted/30" style={{ minHeight: "320px" }}>
-              <img
-                src={img.src || "/placeholder.svg"}
-                alt={img.name}
-                className="absolute inset-0 w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]"
-                onMouseEnter={() => SoundManager.play("tap")}
-              />
-            </div>
-
-            {/* Name bar */}
-            <div className="bg-card/95 backdrop-blur-sm p-2.5 text-center border-t border-border shrink-0">
-              <div className="font-medium text-card-foreground text-xs md:text-sm truncate group-hover:text-[hsl(var(--primary))] transition-colors">
-                {img.name}
+      {/* Double buffering: Current and Next groups */}
+      <div className="relative">
+        {/* Current group - visible */}
+        <div
+          className={`
+            grid gap-1 w-full px-1 md:px-0 transition-all duration-300
+            ${currentGroup.length > 4 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}
+            ${shaking ? "animate-shake" : ""}
+          `}
+          style={{ minHeight: "50vh" }}
+        >
+          {currentGroup.map((img, index) => (
+            <button
+              type="button"
+              key={img.id}
+              onClick={() => {
+                SoundManager.play("button");
+                onChoose(img.id);
+              }}
+              onMouseEnter={() => SoundManager.play("tap")}
+              className="
+                relative group cursor-pointer bg-card rounded-xl border-2 border-transparent
+                hover:border-[hsl(var(--primary))] overflow-hidden transition-all duration-200
+                hover:-translate-y-1 hover:shadow-xl animate-pop flex flex-col
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+              "
+              style={{ animationDelay: `${index * 0.05}s` }}
+            >
+              {/* Number badge */}
+              <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-md bg-foreground/70 backdrop-blur-sm text-background text-xs font-bold flex items-center justify-center shadow-sm">
+                {index + 1}
               </div>
-            </div>
-          </button>
-        ))}
+
+              {/* Image */}
+              <div className="flex-1 w-full relative overflow-hidden bg-muted/30" style={{ minHeight: "320px" }}>
+                <img
+                  src={img.thumbnailUrl || img.src || "/placeholder.svg"}
+                  alt={img.name}
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]"
+                  onMouseEnter={() => SoundManager.play("tap")}
+                  loading="eager"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "/placeholder.svg";
+                  }}
+                />
+              </div>
+
+              {/* Name bar */}
+              <div className="bg-card/95 backdrop-blur-sm p-2.5 text-center border-t border-border shrink-0">
+                <div className="font-medium text-card-foreground text-xs md:text-sm truncate group-hover:text-[hsl(var(--primary))] transition-colors">
+                  {img.name}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Next group - hidden but pre-rendered */}
+        <div
+          className={`
+            grid gap-1 w-full px-1 md:px-0 absolute inset-0 transition-all duration-300
+            ${currentGroup.length > 4 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}
+            opacity-0 pointer-events-none
+          `}
+          style={{ minHeight: "50vh" }}
+        >
+          {currentGroup.map((img, index) => (
+            <button
+              type="button"
+              key={img.id}
+              onClick={() => {
+                SoundManager.play("button");
+                onChoose(img.id);
+              }}
+              onMouseEnter={() => SoundManager.play("tap")}
+              className="
+                relative group cursor-pointer bg-card rounded-xl border-2 border-transparent
+                hover:border-[hsl(var(--primary))] overflow-hidden transition-all duration-200
+                hover:-translate-y-1 hover:shadow-xl animate-pop flex flex-col
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+              "
+              style={{ animationDelay: `${index * 0.05}s` }}
+            >
+              {/* Number badge */}
+              <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-md bg-foreground/70 backdrop-blur-sm text-background text-xs font-bold flex items-center justify-center shadow-sm">
+                {index + 1}
+              </div>
+
+              {/* Image */}
+              <div className="flex-1 w-full relative overflow-hidden bg-muted/30" style={{ minHeight: "320px" }}>
+                <img
+                  src={img.src || "/placeholder.svg"}
+                  alt={img.name}
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]"
+                  onMouseEnter={() => SoundManager.play("tap")}
+                />
+              </div>
+
+              {/* Name bar */}
+              <div className="bg-card/95 backdrop-blur-sm p-2.5 text-center border-t border-border shrink-0">
+                <div className="font-medium text-card-foreground text-xs md:text-sm truncate group-hover:text-[hsl(var(--primary))] transition-colors">
+                  {img.name}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Action buttons */}
